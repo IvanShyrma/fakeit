@@ -48,4 +48,4 @@ for i, item in enumerate(sys.argv):
 if _items and _threads:
     run_fakeit(i=_items, t=_threads, g=_global_offset, m_url=_mongo_url)
 else:
-    print("Usage run_fakeit.py -i <items>  -t <thereads>")
+    print("Usage run_fakeit.py -i <items>  -t <threads> -m_url <'mongodb+srv://user@pass:host'>")

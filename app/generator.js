@@ -11,16 +11,20 @@ const defaults = {
   models: process.cwd(),
   destination: 'console',
   format: 2,
+
   server: '127.0.0.1',
-  bucket: 'default'
+  bucket: 'default',
+  mongodb_url: ''
 };
 
 export default function start(options = {}) {
+
   options = Object.assign({}, defaults, options);
   return new Promise((resolve, reject) => {
     try {
       //console.log('generator.start');
       validate(options);
+      console.log('generator.start1');
       input.prepare(options)
         .then(() => models.prepare(options))
         .then((model_documents_count) => output.prepare(options, resolve, reject, model_documents_count))

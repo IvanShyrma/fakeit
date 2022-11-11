@@ -13,9 +13,11 @@ import PromisePool from 'es6-promise-pool';
 import cookie_parser from 'set-cookie-parser';
 import faker from 'faker';
 import Chance from 'chance';
+
+const {MongoClient} = require('mongodb');
 const chance = new Chance();
 
-let settings, archive, archive_out, couchbase_bucket, sync_session;
+let settings, archive, archive_out, couchbase_bucket, sync_session, mongodb_client;
 
 let total_entries_to_process = 0; // the total number of documents to be output
 let entries_to_process = {}; // an object with each models document count to output
@@ -26,7 +28,7 @@ let archive_entries_processed = 0; // the number of entries that have been succe
 
 // pre run setup / handle settings
 const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve, reject, model_documents_count) => {
-     //console.log('output.prepare');
+  console.log('output.prepare');
   settings = {
     ...options,
     resolve,
@@ -36,15 +38,13 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
     timeout: parseInt(timeout) || 5000, // ensure that the timeout is a number
     exclude: exclude.split(',')
   };
-
   set_entries_to_process(model_documents_count); // save the number of entries for each models documents
-
   set_total_entries_to_process(model_documents_count); // set the total number of entries for all models documents
-
-  if ('console,couchbase,sync-gateway'.indexOf(settings.destination) === -1) {
+  if ('console,couchbase,sync-gateway,mongodb'.indexOf(settings.destination) === -1) {
     // resolve the destination directory
     settings.destination = path.resolve(settings.destination);
     // create any directories that do not exist
+    console.log('create any directories that do not exist');
     await utils.make_directory(settings.destination);
   }
 
@@ -53,6 +53,11 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
             .catch((err) => {
               settings.reject(err);
             });
+  } else if (settings.destination === 'mongodb') {
+    await setup_mongodb(options)
+        .catch((err) => {
+          settings.reject(err);
+        });
   } else if (settings.destination === 'sync-gateway') {
     await setup_syncgateway(options)
             .catch((err) => {
@@ -62,6 +67,7 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
     set_archive_entries_to_process();
     await setup_zip(options);
   }
+  console.log('output.prepare4');
 };
 
 // updates the entry totals, if a model being generated set new values this would be called
@@ -122,6 +128,27 @@ const setup_couchbase = () => new Promise((resolve, reject) => {
         resolve();
       }
     });
+  } catch (e) {
+    reject(e);
+  }
+});
+
+// prepare the connection to mongodb
+const setup_mongodb = () => new Promise((resolve, reject) => {
+  console.log('output.setup_mongodb');
+  console.log(settings.mongodb_url)
+  let uri = settings.mongodb_url;
+  try {
+    mongodb_client = new MongoClient(uri);
+    mongodb_client.connect().then(db => {
+      console.log("mongodb connected");
+      resolve();
+    }).catch(err => {
+      console.log(err.message);
+      reject(e);
+    });
+    // mongodb_client = mongoose.connection;
+
   } catch (e) {
     reject(e);
   }
@@ -214,6 +241,8 @@ const save = (model, documents) => new Promise((resolve, reject) => {
           result = save_couchbase(model, documents);
         } else if (settings.destination === 'sync-gateway') {
           result = save_syncgateway(model, documents);
+        }else if (settings.destination === 'mongodb') {
+          result = save_mongodb(model, documents);
         } else if (settings.destination === 'console') { // flush the output to the console
           result = flush_console(model, documents);
         } else if (settings.output === 'csv') { // write model to csv
@@ -259,6 +288,45 @@ const upsert = (key, data) => new Promise((resolve, reject) => {
         resolve();
       }
     });
+  } catch (e) {
+    reject(e);
+  }
+});
+
+// saves each document to a sync gateway
+const save_mongodb = async (model, documents) => {
+  //console.log('output.save_syncgateway');
+  const generate_calls = function * (docs) { // generator function to handling saving to sg
+    let collectionName = docs[0][model.key].split(':::')[0];
+    for (let i = 0; i < docs.length; i++) {
+      yield insert_to_mongo(collectionName, docs[i][model.key], docs[i]);
+    }
+  };
+
+  const iterator = generate_calls(documents); // initialize the generator function
+  const pool = new PromisePool(iterator, settings.limit); // create a promise pool
+  return await pool.start()
+      .catch((err) => {
+        settings.reject(err);
+      });
+};
+
+// upserts a document into couchbase
+const insert_to_mongo = (collectionName, model, documents) => new Promise((resolve, reject) => {
+  //console.log('output.upsert');
+  try {
+    //console.log(collectionName)
+    //console.log(model)
+    mongodb_client.db("ycsb").collection(collectionName)
+        .insertOne(documents)
+        .then(id => {
+            resolve();
+          }).catch(err => {
+            console.log(err.message);
+            reject(e);
+          });
+    //console.log(mongodb_client.db("ycsb").listCollections())
+
   } catch (e) {
     reject(e);
   }
@@ -439,11 +507,14 @@ const flush_console = (model, documents) => new Promise((resolve, reject) => {
 
 // determines whether or not the entire generation can be finalized
 const finalize = async () => {
-     //console.log('output.finalize');
   if (!settings.archive) { // if we are generating an archive
     if (models_to_process === models_processed) {
       if (!settings.destination === 'couchbase' && couchbase_bucket.connected) {
         couchbase_bucket.disconnect();
+      }
+      if (settings.destination === 'mongodb') {
+        console.log('output.finalize close mongodb');
+        await mongodb_client.close();
       }
       settings.resolve();
     }

@@ -28,6 +28,7 @@ export default function() {
     .option('-u, --username [name]', 'The sync-gateway username')
     .option('-e, --exclude [model]', 'A comma-delimited list of model names to exclude from output', '')
     .option('-v, --verbose', 'Whether or not to use verbose output')
+    .option('-murl, --mongodb_url [value]', 'MongoDB url with user and password')
     .option('-k, --offset [value]', 'The document key/id initial value. Used for parallel execution. Default: 0',0)
     .parse(process.argv);
 

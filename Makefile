@@ -23,7 +23,7 @@ reinstall setup:
 
 build compile:
 	make clean
-	babel app --out-dir dist $(args)
+	npx babel app --out-dir dist $(args)
 
 watch:
 	make build -- --watch

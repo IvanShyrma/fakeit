@@ -12,19 +12,23 @@ let inputs = {};
 // pre run setup / handle settings
 const prepare = (options) => new Promise((resolve, reject) => {
   try {
-   // console.log('input.prepare');
+    console.log('input.prepare');
     if (options.input) {
+      console.log('input.prepare1');
       list(options)
         .then(filter)
         .then(load)
         .then(resolve)
         .catch((err) => {
+          console.log('input.prepare exc1');
           reject(err);
         });
     } else {
+      console.log('input.prepare2');
       resolve();
     }
   } catch (e) {
+    console.log('input.prepare exc');
     reject(e);
   }
 });
@@ -48,7 +52,7 @@ const list = (options) => new Promise((resolve, reject) => {
 
 // filter files for valid input formats: csv, json, cson, yaml and zip
 const filter = async (files) => {
-  //console.log('input.filter');
+  console.log('input.filter');
   files = files.filter((file) => {
     return file.match(/\.(csv|json|cson|ya?ml|zip)$/i);
   });
@@ -60,7 +64,7 @@ const filter = async (files) => {
 
 // loop over all of the found yaml files and load them
 const load = async (files) => {
-  //console.log('input.load', files);
+  console.log('input.load', files);
   let data = [];
   files.forEach((file) => {
     file = path.resolve(file); // resolve the full path

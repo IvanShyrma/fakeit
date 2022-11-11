@@ -19,7 +19,7 @@ let settings; // global variable to hold the available options / settings
 // pre run setup / handle settings
 const prepare = (options) => new Promise((resolve, reject) => {
   settings = options;
-
+  console.log("models.prepare")
   return list(options)
           .then(filter)
           .then(load)
@@ -29,6 +29,7 @@ const prepare = (options) => new Promise((resolve, reject) => {
           .then(() => set_document_counts(options))
           .then(resolve)
           .catch((err) => {
+            consoe.log("tut")
             reject(err);
           });
 });
@@ -104,7 +105,7 @@ const validate = async () => {
 
 // parse each of the model properties for a build functions
 const parse = async () => {
-  //console.log('models.parse');
+  console.log('models.parse');
   try {
     let parsed = [];
     for (let model in models) { // loop over each model
@@ -214,7 +215,7 @@ const parse_model_defaults = async (model) => {
 
 // resolve the dependencies and establish the order the models should be parsed in
 const resolve_dependencies = async () => {
-     //console.log('models.resolve_dependencies');
+     console.log('models.resolve_dependencies');
   let counter = 0;
   // continue looping until all dependencies are resolve or we have looped (model_count * 5) times at which point
   // not all dependencies could be resolved and we will just error to prevent an infinte loop
@@ -273,7 +274,7 @@ const get_document_counts = () => {
 
 // resolve the dependencies and establish the order the models should be parsed in
 const set_document_counts = async () => {
-  //console.log('models.set_document_counts');
+  console.log('models.set_document_counts');
   model_order.forEach((v) => {
     let current_model = models[v];
     let number;
@@ -289,7 +290,7 @@ const set_document_counts = async () => {
 
 // handles generation of data for each model
 const generate = async (options) => {
-  //console.log('models.generate');
+  console.log('models.generate');
   for (let i = 0; i < model_order.length; i++) { // loop over each model and execute in order of dependency
     //console.log("= documents run for each model")
     await documents.run(// eslint-disable-line babel/no-await-in-loop

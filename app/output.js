@@ -6,15 +6,17 @@ import archiver from 'archiver';
 import csv_stringify from 'csv-stringify';
 import yaml from 'yamljs';
 import cson from 'cson';
-import couchbase from 'couchbase';
+//import couchbase from 'couchbase';
 import utils from './utils';
 import request from 'request';
 import PromisePool from 'es6-promise-pool';
 import cookie_parser from 'set-cookie-parser';
 import faker from 'faker';
 import Chance from 'chance';
+import {DurabilityLevel} from "couchbase/dist/generaltypes";
 
 const {MongoClient} = require('mongodb');
+var couchbase = require('couchbase')
 const chance = new Chance();
 
 let settings, archive, archive_out, couchbase_bucket, sync_session, mongodb_client;
@@ -49,6 +51,7 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
   }
 
   if (settings.destination === 'couchbase') {
+    console.log('output.couchbase');
     await setup_couchbase(options)
             .catch((err) => {
               settings.reject(err);
@@ -67,7 +70,6 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
     set_archive_entries_to_process();
     await setup_zip(options);
   }
-  console.log('output.prepare4');
 };
 
 // updates the entry totals, if a model being generated set new values this would be called
@@ -114,20 +116,26 @@ const set_archive_entries_to_process = () => {
 
 // prepare the connection to couchbase
 const setup_couchbase = () => new Promise((resolve, reject) => {
-     //console.log('output.setup_couchbase');
+  console.log('output.setup_couchbase');
   try {
-    const cluster = new couchbase.Cluster(settings.server);
-    couchbase_bucket = cluster.openBucket(settings.bucket, settings.password || '', (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        if (settings.timeout && parseInt(settings.timeout)) {
-          couchbase_bucket.operationTimeout = parseInt(settings.timeout);
-        }
-           console.log(`Connection to "${settings.bucket}" bucket at "${settings.server}" was successful`);
-        resolve();
-      }
-    });
+    const cluster = couchbase.connect('couchbases://' + settings.server,
+        {username: settings.username,
+                password: settings.password,
+                timeouts: {
+                  kvTimeout: 10000, // milliseconds
+                },
+              },(err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            couchbase_bucket = result.bucket(settings.bucket);
+            /*if (settings.timeout && parseInt(settings.timeout)) {
+              couchbase_bucket.operationTimeout = 50000;
+            }*/
+            console.log(`Connection to "${settings.bucket}" bucket at "${settings.server}" was successful`);
+            resolve();
+          }
+        });
   } catch (e) {
     reject(e);
   }
@@ -262,10 +270,10 @@ const save = (model, documents) => new Promise((resolve, reject) => {
 
 // saves each document to a couchbase instance
 const save_couchbase = async (model, documents) => {
-     //console.log('output.save_couchbase');
   const generate_calls = function * (docs) { // generator function to handling saving to cb
+    let collectionName = docs[0][model.key].split(':::')[0];
     for (let i = 0; i < docs.length; i++) {
-      yield upsert(docs[i][model.key], docs[i]);
+      yield upsert(collectionName, docs[i][model.key], docs[i]);
     }
   };
 
@@ -278,17 +286,19 @@ const save_couchbase = async (model, documents) => {
 };
 
 // upserts a document into couchbase
-const upsert = (key, data) => new Promise((resolve, reject) => {
-     //console.log('output.upsert');
+const upsert = (collectionName, key, data) => new Promise((resolve, reject) => {
   try {
-    couchbase_bucket.upsert(key.toString(), data, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
+    couchbase_bucket.ping()
+    couchbase_bucket.defaultScope().collection(collectionName)
+        .upsert(key.toString(), data, {durabilityLevel: DurabilityLevel.Majority})
+        .then(res => {
+            resolve();
+          }).catch(err => {
+            console.log(err.message);
+            reject(err);
+          });
   } catch (e) {
+    console.log("Error")
     reject(e);
   }
 });
@@ -315,8 +325,6 @@ const save_mongodb = async (model, documents) => {
 const insert_to_mongo = (collectionName, model, documents) => new Promise((resolve, reject) => {
   //console.log('output.upsert');
   try {
-    //console.log(collectionName)
-    //console.log(model)
     mongodb_client.db("ycsb").collection(collectionName)
         .insertOne(documents)
         .then(id => {
@@ -510,7 +518,8 @@ const finalize = async () => {
   if (!settings.archive) { // if we are generating an archive
     if (models_to_process === models_processed) {
       if (!settings.destination === 'couchbase' && couchbase_bucket.connected) {
-        couchbase_bucket.disconnect();
+        console.log("couchbase_bucket close")
+        await couchbase_bucket.cluster.close()
       }
       if (settings.destination === 'mongodb') {
         console.log('output.finalize close mongodb');
@@ -569,6 +578,7 @@ const error_cleanup = () => new Promise((resolve, reject) => {
         });
       });
     } else if (settings.destination === 'couchbase') {
+      console.log("couchbase_bucket.disconnect")
       couchbase_bucket.connected && couchbase_bucket.disconnect();
     }
   } catch (e) {

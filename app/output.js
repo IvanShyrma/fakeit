@@ -122,7 +122,13 @@ const setup_couchbase = () => new Promise((resolve, reject) => {
         {username: settings.username,
                 password: settings.password,
                 timeouts: {
-                  kvTimeout: 10000, // milliseconds
+                  kvTimeout: 3600000,
+                  kvDurableTimeout: 3600000,
+                  viewTimeout: 3600000,
+                  queryTimeout: 3600000,
+                  analyticsTimeout: 3600000,
+                  searchTimeout: 3600000,
+                  managementTimeout: 3600000
                 },
               },(err, result) => {
           if (err) {
@@ -290,7 +296,7 @@ const upsert = (collectionName, key, data) => new Promise((resolve, reject) => {
   try {
     couchbase_bucket.ping()
     couchbase_bucket.defaultScope().collection(collectionName)
-        .upsert(key.toString(), data, {durabilityLevel: DurabilityLevel.Majority})
+        .upsert(key.toString(), data)
         .then(res => {
             resolve();
           }).catch(err => {

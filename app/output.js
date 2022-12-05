@@ -278,8 +278,9 @@ const save = (model, documents) => new Promise((resolve, reject) => {
 const save_couchbase = async (model, documents) => {
   const generate_calls = function * (docs) { // generator function to handling saving to cb
     let collectionName = docs[0][model.key].split(':::')[0];
+    let collection_obj = couchbase_bucket.defaultScope().collection(collectionName)
     for (let i = 0; i < docs.length; i++) {
-      yield upsert(collectionName, docs[i][model.key], docs[i]);
+      yield upsert(collection_obj, docs[i][model.key], docs[i]);
     }
   };
 
@@ -292,21 +293,20 @@ const save_couchbase = async (model, documents) => {
 };
 
 // upserts a document into couchbase
-const upsert = (collectionName, key, data) => new Promise((resolve, reject) => {
-  try {
-    couchbase_bucket.ping()
-    couchbase_bucket.defaultScope().collection(collectionName)
-        .upsert(key.toString(), data)
-        .then(res => {
+const upsert = (collection_obj, key, data) => new Promise((resolve, reject) => {
+    try {
+      collection_obj
+          .upsert(key.toString(), data)
+          .then(res => {
             resolve();
           }).catch(err => {
-            console.log(err.message);
-            reject(err);
-          });
-  } catch (e) {
-    console.log("Error")
-    reject(e);
-  }
+        console.log(err);
+        reject(err);
+      });
+    } catch (e) {
+      console.log("Error")
+      reject(e);
+    }
 });
 
 // saves each document to a sync gateway
@@ -523,6 +523,11 @@ const flush_console = (model, documents) => new Promise((resolve, reject) => {
 const finalize = async () => {
   if (!settings.archive) { // if we are generating an archive
     if (models_to_process === models_processed) {
+      console.log("finalize")
+      if (settings.destination === 'couchbase') {
+        console.log('output.finalize close couchbase');
+        await couchbase_bucket.cluster.close()
+      }
       if (!settings.destination === 'couchbase' && couchbase_bucket.connected) {
         console.log("couchbase_bucket close")
         await couchbase_bucket.cluster.close()

@@ -121,15 +121,13 @@ const setup_couchbase = () => new Promise((resolve, reject) => {
     const cluster = couchbase.connect('couchbases://' + settings.server,
         {username: settings.username,
                 password: settings.password,
-                timeouts: {
-                  kvTimeout: 3600000,
-                  kvDurableTimeout: 3600000,
-                  viewTimeout: 3600000,
-                  queryTimeout: 3600000,
-                  analyticsTimeout: 3600000,
-                  searchTimeout: 3600000,
-                  managementTimeout: 3600000
-                },
+                kvTimeout: 3600000,
+                kvDurableTimeout: 3600000,
+                viewTimeout: 3600000,
+                queryTimeout: 3600000,
+                analyticsTimeout: 3600000,
+                searchTimeout: 3600000,
+                managementTimeout: 3600000
               },(err, result) => {
           if (err) {
             reject(err);

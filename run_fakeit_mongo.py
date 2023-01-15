@@ -2,6 +2,9 @@ import subprocess
 from threading import Thread
 import sys
 
+# Example to run
+# python3 run_fakeit_mongo.py -i 10000 -t 2 -m_url 'mongodb+srv://USER:PASS@HOST/?retryWrites=true&w=majority'
+
 _items = None
 _threads = None
 _global_offset = 0

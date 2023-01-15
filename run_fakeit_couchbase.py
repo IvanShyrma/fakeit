@@ -2,6 +2,10 @@ import subprocess
 from threading import Thread
 import sys
 
+# Example to run
+# python3 run_fakeit_couchbase.py -i 2000 -d couchbase -s $HOST -b $BUCKET_NAME -u $USER_NAME -p $PASS -t 2
+
+
 _items = None
 _threads = None
 _global_offset = 0

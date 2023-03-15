@@ -51,6 +51,7 @@
     "mkdirp": "0.5.1",
     "mongodb": "^4.11.0",
     "object-path": "^0.11.8",
+    "redis": "^4.6.5",
     "request": "^2.78.0",
     "set-cookie-parser": "^2.5.1",
     "to-js": "^0.0.6",

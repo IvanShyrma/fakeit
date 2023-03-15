@@ -14,7 +14,8 @@ const defaults = {
 
   server: '127.0.0.1',
   bucket: 'default',
-  mongodb_url: ''
+  mongodb_url: '',
+  redis_url: ''
 };
 
 export default function start(options = {}) {
@@ -24,7 +25,6 @@ export default function start(options = {}) {
     try {
       //console.log('generator.start');
       validate(options);
-      console.log('generator.start1');
       input.prepare(options)
         .then(() => models.prepare(options))
         .then((model_documents_count) => output.prepare(options, resolve, reject, model_documents_count))

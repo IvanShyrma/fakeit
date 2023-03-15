@@ -14,12 +14,13 @@ import cookie_parser from 'set-cookie-parser';
 import faker from 'faker';
 import Chance from 'chance';
 import {DurabilityLevel} from "couchbase/dist/generaltypes";
+import { createClient } from 'redis';
 
 const {MongoClient} = require('mongodb');
 var couchbase = require('couchbase')
 const chance = new Chance();
 
-let settings, archive, archive_out, couchbase_bucket, sync_session, mongodb_client;
+let settings, archive, archive_out, couchbase_bucket, sync_session, mongodb_client, redis_client;
 
 let total_entries_to_process = 0; // the total number of documents to be output
 let entries_to_process = {}; // an object with each models document count to output
@@ -42,7 +43,7 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
   };
   set_entries_to_process(model_documents_count); // save the number of entries for each models documents
   set_total_entries_to_process(model_documents_count); // set the total number of entries for all models documents
-  if ('console,couchbase,sync-gateway,mongodb'.indexOf(settings.destination) === -1) {
+  if ('console,couchbase,sync-gateway,mongodb,redis'.indexOf(settings.destination) === -1) {
     // resolve the destination directory
     settings.destination = path.resolve(settings.destination);
     // create any directories that do not exist
@@ -58,6 +59,12 @@ const prepare = async ({ format, limit, timeout, exclude, ...options }, resolve,
             });
   } else if (settings.destination === 'mongodb') {
     await setup_mongodb(options)
+        .catch((err) => {
+          settings.reject(err);
+        });
+  } else if (settings.destination === 'redis') {
+    console.log('output.redis');
+    await setup_redis(options)
         .catch((err) => {
           settings.reject(err);
         });
@@ -166,6 +173,25 @@ const setup_mongodb = () => new Promise((resolve, reject) => {
   }
 });
 
+
+const setup_redis  = () => new Promise((resolve, reject) => {
+  let redis_uri = settings.redis_url;
+  try {
+    redis_client = createClient({
+      url: redis_uri
+    });
+    redis_client.connect().then(db => {
+      console.log("redis connected");
+      resolve();
+    }).catch(err => {
+      reject(e);
+    });
+  } catch (e) {
+    reject(e);
+  }
+});
+
+
 // prepare the connection to the sync gateway
 const setup_syncgateway = () => new Promise((resolve, reject) => {
      //console.log('output.setup_syncgateway');
@@ -253,8 +279,10 @@ const save = (model, documents) => new Promise((resolve, reject) => {
           result = save_couchbase(model, documents);
         } else if (settings.destination === 'sync-gateway') {
           result = save_syncgateway(model, documents);
-        }else if (settings.destination === 'mongodb') {
+        } else if (settings.destination === 'mongodb') {
           result = save_mongodb(model, documents);
+        } else if (settings.destination === 'redis') {
+          result = save_redis(model, documents);
         } else if (settings.destination === 'console') { // flush the output to the console
           result = flush_console(model, documents);
         } else if (settings.output === 'csv') { // write model to csv
@@ -325,6 +353,22 @@ const save_mongodb = async (model, documents) => {
       });
 };
 
+const save_redis = async (model, documents) => {
+  const generate_calls = function * (docs) { // generator function to handling saving to sg
+    let collectionName = docs[0][model.key].split(':::')[0];
+    for (let i = 0; i < docs.length; i++) {
+      yield insert_to_redis(collectionName, docs[i][model.key], docs[i]);
+    }
+  };
+
+  const iterator = generate_calls(documents); // initialize the generator function
+  const pool = new PromisePool(iterator, settings.limit); // create a promise pool
+  return await pool.start()
+      .catch((err) => {
+        settings.reject(err);
+      });
+};
+
 // upserts a document into couchbase
 const insert_to_mongo = (collectionName, model, documents) => new Promise((resolve, reject) => {
   //console.log('output.upsert');
@@ -335,7 +379,7 @@ const insert_to_mongo = (collectionName, model, documents) => new Promise((resol
             resolve();
           }).catch(err => {
             console.log(err.message);
-            reject(e);
+            reject(err);
           });
     //console.log(mongodb_client.db("ycsb").listCollections())
 
@@ -343,6 +387,21 @@ const insert_to_mongo = (collectionName, model, documents) => new Promise((resol
     reject(e);
   }
 });
+
+const insert_to_redis = (collectionName, model, documents) => new Promise((resolve, reject) => {
+  try {
+    redis_client.json.set(documents['_id'], '$', documents)
+        .then(() => {
+          resolve();
+        }).catch(err => {
+      console.log(err);
+      reject(err);
+    });
+  } catch (e) {
+    reject(e);
+  }
+});
+
 
 // saves each document to a sync gateway
 const save_syncgateway = async (model, documents) => {
@@ -533,6 +592,10 @@ const finalize = async () => {
       if (settings.destination === 'mongodb') {
         console.log('output.finalize close mongodb');
         await mongodb_client.close();
+      }
+      if (settings.destination === 'redis') {
+        console.log('output.finalize close redis');
+        await redis_client.disconnect();
       }
       settings.resolve();
     }

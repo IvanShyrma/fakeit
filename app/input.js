@@ -24,7 +24,6 @@ const prepare = (options) => new Promise((resolve, reject) => {
           reject(err);
         });
     } else {
-      console.log('input.prepare2');
       resolve();
     }
   } catch (e) {
